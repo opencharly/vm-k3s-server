@@ -30,7 +30,7 @@ k3s-server:
             # merge and the bed's `kube:` checks dispatch. (box/<distro> adopts the
             # matching @github pin via reconcile later — the deliberate cross-repo lag;
             # the R10 bed loads the LOCAL candy via the superproject override.)
-            - plugin-kube
+            - '@github.com/opencharly/plugin-kube/candy/plugin-kube:v2026.237.1424'
         # Layer-intrinsic container security. Applied ONLY to pod targets via
         # quadlet PodmanArgs; VM and host targets silently ignore this block
         # (they have full kernel access in their own right). Verified live:
