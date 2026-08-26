@@ -11,7 +11,7 @@ k3s-server:
             Ready node with Traefik as the default IngressClass and local-path
             as the default StorageClass.
         require:
-            - k3s
+            - '@github.com/opencharly/layer-k3s:v2026.237.457'
             # k3s-kernel ensures the FULL distro kernel is installed and reboots the venue so it
             # boots it. The Arch cloud image boots a minimal kernel without overlayfs or
             # iptables/netfilter — k3s's containerd and kube-proxy both fail on it. The deploy's
@@ -20,7 +20,7 @@ k3s-server:
             # topo-sorts BEFORE this candy's) reboots the VM mid-deploy so the checks below run
             # against a kernel that can actually run k3s. Only the vm deploy reboots; pod/OCI/
             # kubernetes skip the RebootStep and local targets skip + warn.
-            - k3s-kernel
+            - '@github.com/opencharly/layer-k3s-kernel:v2026.237.457'
             # plugin-kube is the OUT-OF-TREE plugin that serves the `kube:` cluster-probe
             # check verb AND the clientcmd-backed k3s kubeconfig-merge K3sPostProvision
             # performs (the heavy k8s.io/client-go + k8s.io/apimachinery stack lives there,
@@ -30,7 +30,7 @@ k3s-server:
             # merge and the bed's `kube:` checks dispatch. (box/<distro> adopts the
             # matching @github pin via reconcile later — the deliberate cross-repo lag;
             # the R10 bed loads the LOCAL candy via the superproject override.)
-            - plugin-kube
+            - '@github.com/opencharly/plugin-kube/candy/plugin-kube:v2026.237.1424'
         # Layer-intrinsic container security. Applied ONLY to pod targets via
         # quadlet PodmanArgs; VM and host targets silently ignore this block
         # (they have full kernel access in their own right). Verified live:
