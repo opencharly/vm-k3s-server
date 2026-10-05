@@ -9,7 +9,7 @@ k3s-server:
             Ready node with Traefik as the default IngressClass and local-path
             as the default StorageClass.
         require:
-            - '@github.com/opencharly/layer-k3s:v2026.272.0223'
+            - '@github.com/opencharly/layer-k3s:v2026.277.1356'
             # k3s-kernel ensures the FULL distro kernel is installed and reboots the venue so it
             # boots it. The Arch cloud image boots a minimal kernel without overlayfs or
             # iptables/netfilter — k3s's containerd and kube-proxy both fail on it. The deploy's
