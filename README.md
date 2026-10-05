@@ -51,7 +51,7 @@ k3s-srv:
 
 ```bash
 charly vm create k3s-srv
-charly fleet add vm:k3s-srv
+charly deploy add vm:k3s-srv
 kubectl --context k3s-srv get nodes
 ```
 
