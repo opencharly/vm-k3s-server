@@ -200,6 +200,19 @@ k3s-server:
                 command: /usr/local/bin/k3s-clock-ensure.sh
                 exit_status: 0
               context: [runtime]
+            # The REFUSAL itself, made testable without a boot-time race. The guard's input is one command's
+            # output (`timedatectl show -p NTPSynchronized --value`), so a stub earlier on PATH feeds it the
+            # state a real unsynchronised guest would report. **This check fails if the refusal logic is
+            # removed** - the script would exit 0 where the assertion requires non-zero - which is the property
+            # the round-1/2 versions of this coverage lacked, and the reason the validator blocked twice.
+            #
+            # It is the shell-level analogue of what spec's readiness fix did in Go: extract the decision from
+            # the driving, then assert the decision against fixed inputs.
+            - check: the guard REFUSES a guest whose clock reports unsynchronised, and says why
+              command:
+                command: sh -c 'd=$(mktemp -d); printf "#!/bin/sh\necho no\n" > "$d/timedatectl"; chmod 0755 "$d/timedatectl"; PATH="$d:$PATH" /usr/local/bin/k3s-clock-ensure.sh'
+                exit_status: 1
+              context: [runtime]
             - run: install the cgroup cpuset pre-start guard the k3s service execs
               write: /usr/local/bin/k3s-cpuset-ensure.sh
               mode: "0755"
