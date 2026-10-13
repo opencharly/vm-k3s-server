@@ -138,13 +138,79 @@ k3s-server:
               #
               # PRE — remove the trigger (the cgroup cpuset-delegation race).
               exec_start_pre:
+                  # The clock first: k3s must not issue certificates on a clock it cannot trust.
+                  - /usr/local/bin/k3s-clock-ensure.sh
                   - /usr/local/bin/k3s-cpuset-ensure.sh
               # POST — heal the permanent wedge that trigger leaves behind. The leading
               # "-" is systemd's ignore-failure marker: a guard must never be able to take
               # down the service it exists to protect.
+              #
+              # That rationale is POST-only, and deliberately NOT the rule above it. The pre-start
+              # entries are fail-closed: k3s-clock-ensure.sh refuses to start the service on an
+              # unsynchronised guest clock, and k3s-cpuset-ensure.sh likewise, because both protect
+              # k3s from a state it cannot recover from once running. Refusing to start IS the
+              # protection there; here in POST it would be a second failure on top of a wedged one.
               exec_start_post:
                   - -/usr/local/bin/k3s-crd-heal.sh %n
         plan:
+            - run: install the guest-clock pre-start guard the k3s service execs
+              write: /usr/local/bin/k3s-clock-ensure.sh
+              mode: "0755"
+              run_as: root
+              content: |
+                #!/bin/sh
+                # Assert that the guest clock is trustworthy before k3s starts.
+                #
+                # Why this exists: k3s issues its server certificate and starts serving immediately after
+                # boot. On a freshly created disposable VM whose clock has not synchronised yet, that
+                # certificate is outside its validity window as any client evaluates it, and the failure
+                # surfaces far from here as a TLS error from a kube: probe in a consumer repo:
+                #   tls: failed to verify certificate: x509: certificate has expired or is not yet valid
+                # Measured: charly run 2026.286.1357 - deploy-add PASSED (k3s came up happily on the clock it
+                # should not have trusted) and the probes then failed on that line. RCA and the eliminated
+                # alternative causes: opencharly/charly#882; the fix is filed here as opencharly/vm-k3s-server#9.
+                #
+                # This is a state ASSERTION, not a wait - the same convention as k3s-cpuset-ensure.sh: read,
+                # verify, and fail loudly. There is nothing to poll for here: either the clock is
+                # synchronised or k3s must not start on it.
+                set -eu
+                sync="$(timedatectl show -p NTPSynchronized --value 2>/dev/null || echo unknown)"
+                if [ "$sync" = "yes" ]; then
+                    exit 0
+                fi
+                {
+                    echo "k3s-clock-ensure: refusing to start k3s on an unsynchronised clock (NTPSynchronized=$sync)"
+                    echo "k3s-clock-ensure: the server certificate k3s issues would read as not yet valid to every client"
+                    date -u
+                } >&2
+                exit 1
+
+            # WHAT THIS PROVES, and what it does not - stated because the first version of this step
+            # claimed the second. The guard's REFUSAL is a boot-time race: a guest started before any clock
+            # source settles (the failure this guard exists for - see the script's own docblock, with
+            # `last_update: Thu, 01 Jan 1970 00:00:43 +0000` as the measured symptom). It is NOT reproducible on
+            # a settled guest, and the reason is the flag the guard reads: `NTPSynchronized` comes from the
+            # kernel/hypervisor RTC, not from a time service, so on a running guest it is permanently `yes` and
+            # no supported one-liner makes it otherwise (`set-ntp false` has no daemon to stop; `set-time` to the
+            # epoch is refused). Measured on the guest this bed leaves running.
+            #
+            # So the live assertion is the one a live run CAN make, and it is not nothing:
+            - check: the guest-clock guard is installed, executable, and does NOT refuse on a healthy clock
+              exit_status: 0
+              command: /usr/local/bin/k3s-clock-ensure.sh
+              context: [runtime]
+            # The REFUSAL itself, made testable without a boot-time race. The guard's input is one command's
+            # output (`timedatectl show -p NTPSynchronized --value`), so a stub earlier on PATH feeds it the
+            # state a real unsynchronised guest would report. **This check fails if the refusal logic is
+            # removed** - the script would exit 0 where the assertion requires non-zero - which is the property
+            # the round-1/2 versions of this coverage lacked, and the reason the validator blocked twice.
+            #
+            # It is the shell-level analogue of what spec's readiness fix did in Go: extract the decision from
+            # the driving, then assert the decision against fixed inputs.
+            - check: the guard REFUSES a guest whose clock reports unsynchronised, and says why
+              exit_status: 1
+              command: sh -c 'd=$(mktemp -d); printf "#!/bin/sh\necho no\n" > "$d/timedatectl"; chmod 0755 "$d/timedatectl"; PATH="$d:$PATH" /usr/local/bin/k3s-clock-ensure.sh'
+              context: [runtime]
             - run: install the cgroup cpuset pre-start guard the k3s service execs
               write: /usr/local/bin/k3s-cpuset-ensure.sh
               mode: "0755"
