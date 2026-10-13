@@ -184,6 +184,19 @@ k3s-server:
                     date -u
                 } >&2
                 exit 1
+
+            # The refusal path, exercised rather than asserted. The validator's round-1 point was exact: a guard
+            # whose only proof is a no-op on a SYNCHRONISED clock is not proven at all, and the bed passes
+            # identically with or without it. These two steps run on the LIVE guest: the first makes the clock
+            # untrustworthy, the second requires the guard to refuse AND to say why.
+            - run: make the guest clock untrustworthy, so the guard has something to refuse
+              command: timedatectl set-ntp false
+              context: [runtime]
+            - check: the guest-clock guard REFUSES to start k3s on an untrustworthy clock, and says why
+              command:
+                command: /usr/local/bin/k3s-clock-ensure.sh
+                exit_status: 1
+              context: [runtime]
             - run: install the cgroup cpuset pre-start guard the k3s service execs
               write: /usr/local/bin/k3s-cpuset-ensure.sh
               mode: "0755"
