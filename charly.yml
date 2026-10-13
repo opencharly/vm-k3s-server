@@ -144,6 +144,12 @@ k3s-server:
               # POST — heal the permanent wedge that trigger leaves behind. The leading
               # "-" is systemd's ignore-failure marker: a guard must never be able to take
               # down the service it exists to protect.
+              #
+              # That rationale is POST-only, and deliberately NOT the rule above it. The pre-start
+              # entries are fail-closed: k3s-clock-ensure.sh refuses to start the service on an
+              # unsynchronised guest clock, and k3s-cpuset-ensure.sh likewise, because both protect
+              # k3s from a state it cannot recover from once running. Refusing to start IS the
+              # protection there; here in POST it would be a second failure on top of a wedged one.
               exec_start_post:
                   - -/usr/local/bin/k3s-crd-heal.sh %n
         plan:
