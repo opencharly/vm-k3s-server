@@ -138,6 +138,8 @@ k3s-server:
               #
               # PRE — remove the trigger (the cgroup cpuset-delegation race).
               exec_start_pre:
+                  # The clock first: k3s must not issue certificates on a clock it cannot trust.
+                  - /usr/local/bin/k3s-clock-ensure.sh
                   - /usr/local/bin/k3s-cpuset-ensure.sh
               # POST — heal the permanent wedge that trigger leaves behind. The leading
               # "-" is systemd's ignore-failure marker: a guard must never be able to take
@@ -145,6 +147,37 @@ k3s-server:
               exec_start_post:
                   - -/usr/local/bin/k3s-crd-heal.sh %n
         plan:
+            - run: install the guest-clock pre-start guard the k3s service execs
+              write: /usr/local/bin/k3s-clock-ensure.sh
+              mode: "0755"
+              run_as: root
+              content: |
+                #!/bin/sh
+                # Assert that the guest clock is trustworthy before k3s starts.
+                #
+                # Why this exists: k3s issues its server certificate and starts serving immediately after
+                # boot. On a freshly created disposable VM whose clock has not synchronised yet, that
+                # certificate is outside its validity window as any client evaluates it, and the failure
+                # surfaces far from here as a TLS error from a kube: probe in a consumer repo:
+                #   tls: failed to verify certificate: x509: certificate has expired or is not yet valid
+                # Measured: charly run 2026.286.1357 - deploy-add PASSED (k3s came up happily on the clock it
+                # should not have trusted) and the probes then failed on that line. RCA and the eliminated
+                # alternative causes: opencharly/charly#882; the fix is filed here as opencharly/vm-k3s-server#9.
+                #
+                # This is a state ASSERTION, not a wait - the same convention as k3s-cpuset-ensure.sh: read,
+                # verify, and fail loudly. There is nothing to poll for here: either the clock is
+                # synchronised or k3s must not start on it.
+                set -eu
+                sync="$(timedatectl show -p NTPSynchronized --value 2>/dev/null || echo unknown)"
+                if [ "$sync" = "yes" ]; then
+                    exit 0
+                fi
+                {
+                    echo "k3s-clock-ensure: refusing to start k3s on an unsynchronised clock (NTPSynchronized=$sync)"
+                    echo "k3s-clock-ensure: the server certificate k3s issues would read as not yet valid to every client"
+                    date -u
+                } >&2
+                exit 1
             - run: install the cgroup cpuset pre-start guard the k3s service execs
               write: /usr/local/bin/k3s-cpuset-ensure.sh
               mode: "0755"
