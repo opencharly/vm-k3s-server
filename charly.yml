@@ -54,9 +54,10 @@ k3s-server:
                 - /dev/fuse
         # K3S_CLUSTER_TOKEN is the shared pre-shared token that authorizes
         # k3s-agent nodes to join this server. Auto-generated on first deploy
-        # — the resolver in charly/layer_secrets.go (ensureLayerSecret) generates
-        # a 32-byte hex token via DefaultCredentialStore.Set the first time
-        # this layer (or k3s-agent — same name) resolves the secret. Both
+        # — the resolver (`deploykit.EnsureCandySecret`) generates one and the
+        # credential store persists it: 32 random bytes as url-safe base64,
+        # 44 characters. The first of this layer or k3s-agent (same secret
+        # name) to resolve writes it. Both
         # layers read the same persisted value on subsequent calls, so the
         # server and every agent automatically share the token without
         # operator setup. Override only when you need a specific value:
